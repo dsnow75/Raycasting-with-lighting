@@ -19,14 +19,24 @@ typedef struct {
   union {
     struct {
       double normal[3];
+      double difuse_color;
+      double specular_color;      
     } plane;
     struct {
       double radius;
+      double difuse_color;
+      double specular_color;
     } sphere;
     struct {
       double height;
       double width;
     } camera;
+    struct{
+        double radial2;
+        double radial1;
+        double radial0;
+        double angular0;
+    } light;
   };
 } Object;
 typedef struct{
@@ -41,6 +51,7 @@ typedef struct{
     int line = 1;
     Pixel* image;
     Object** objects;
+    Object** lights;
     #define MAXCOLOR 255 
     void set_camera(FILE* json);
     
@@ -216,6 +227,7 @@ void read_scene(char* filename) {
     }
     if (c == '{') {
         objects[i] = malloc(sizeof(Object));
+        lights[i] = malloc(sizeof(Object));
       skip_ws(json);
     
       // Parse the object
@@ -243,6 +255,10 @@ void read_scene(char* filename) {
       } else if (strcmp(value, "plane") == 0) {
           
           objects[i]->kind = 0;
+          
+      }else if(strcmp(value, "light") == 0){
+  
+          lights[i]->kind = 2;
           
       } else {
 	fprintf(stderr, "Error: Unknown type, \"%s\", on line number %d.\n", value, line);
@@ -384,12 +400,12 @@ int main(int argc, char** argv) {
           cy - (h/2) + pixheight * (y + 0.5),
           1
         };
+        double t = 0;
         normalize(Rd);
-
+        Object* closest_object = NULL; 
         double best_t = INFINITY;
         for (int i=0; objects[i] != 0; i += 1) {
-            double t = 0;
-
+          
           switch(objects[i]->kind) {
 
               case 0:
@@ -404,12 +420,68 @@ int main(int argc, char** argv) {
             // Horrible error
                   exit(1);
           }
+          
           if (t > 0 && t < best_t){
               best_t = t;
               object = malloc(sizeof(Object));
               memcpy(object, objects[i], sizeof(Object));
           } 
         }
+        double* color = malloc(sizeof(double)*3);
+        color[0] = 0;
+        color[1] = 0;
+        color[2] = 0;
+        double* light_position = malloc(sizeof(double)*3);
+        Object* closest_shadow_object = malloc(sizeof(Object));
+        double Ron[3] = {0,0,0};
+        double* Rdn = {0,0,0};
+        for(int j = 0; lights[j] != NULL; j += 1){
+            Ron[0] = best_t * Rd[0] + Ro[0];
+            Ron[1] = best_t * Rd[1] + Ro[1];
+            Ron[2] = best_t * Rd[2] + Ro[2];
+            light_position = lights[j]->center;
+            Rdn[0] = light_position[0] - Ron[0];
+            Rdn[1] = light_position[1] - Ron[1];
+            Rdn[2] = light_position[2] - Ron[2];
+            double distance_to_light = Rdn - Ron;
+            closest_shadow_object = closest_object;
+            for(int k = 0; objects[k] != NULL; k += 1){
+                if(objects[k] == closest_object){
+                    continue;
+                }
+                switch(objects[k]->kind) {
+                    case 0:
+                        t = plane_intersection(Ron, Rdn,objects[k]->center, objects[k]->plane.normal);
+                        break;
+
+                    case 1:
+                        t = sphere_intersection(Ron, Rdn,objects[k]->center, objects[k]->sphere.radius);
+                        break;
+                    default:
+                  // Horrible error
+                        exit(1);
+                }
+                if(best_t > distance_to_light){
+                    continue;
+                }
+            }
+            if (closest_shadow_object == NULL){
+                if (closest_object->kind == 1){
+                    double* N = Ron - closest_object->center;
+                    double diffuse = closest_object->sphere.difuse_color;
+                    double specular = closest_object->sphere.specular_color;
+                }else if (closest_object->kind == 0){
+                    double* N = closest_object->plane.normal;
+                    double diffuse = closest_object->plane.specular_color;
+                }else{
+                    fprintf(stderr, "Type of object does not exist");
+                }
+                double* L = Rdn;
+                double* V = Rd;
+                
+            }
+        }
+        
         //set the color for the pixel
         if (best_t > 0 && best_t != INFINITY) {
             image[index].r = (unsigned char)(object->color[0]*MAXCOLOR);
