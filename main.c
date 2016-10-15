@@ -402,7 +402,6 @@ int main(int argc, char** argv) {
         };
         double t = 0;
         normalize(Rd);
-        Object* closest_object = NULL; 
         double best_t = INFINITY;
         for (int i=0; objects[i] != 0; i += 1) {
           
@@ -444,9 +443,9 @@ int main(int argc, char** argv) {
             Rdn[1] = light_position[1] - Ron[1];
             Rdn[2] = light_position[2] - Ron[2];
             double distance_to_light = Rdn - Ron;
-            closest_shadow_object = closest_object;
+            closest_shadow_object = object;
             for(int k = 0; objects[k] != NULL; k += 1){
-                if(objects[k] == closest_object){
+                if(objects[k] == object){
                     continue;
                 }
                 switch(objects[k]->kind) {
@@ -466,13 +465,29 @@ int main(int argc, char** argv) {
                 }
             }
             if (closest_shadow_object == NULL){
-                if (closest_object->kind == 1){
-                    double* N = Ron - closest_object->center;
-                    double diffuse = closest_object->sphere.difuse_color;
-                    double specular = closest_object->sphere.specular_color;
-                }else if (closest_object->kind == 0){
-                    double* N = closest_object->plane.normal;
-                    double diffuse = closest_object->plane.specular_color;
+                double N[3];
+                double diffuse[3];
+                double specular[3];
+                if (object->kind == 1){
+                    N[0] = Ron[0] - object->center[0];
+                    N[1] = Ron[1] - object->center[1];
+                    N[2] = Ron[2] - object->center[2];
+                    diffuse[0] = object->sphere.difuse_color[0];
+                    diffuse[1] = object->sphere.difuse_color[1];
+                    diffuse[2] = object->sphere.difuse_color[2];
+                    specular[0] = object->sphere.specular_color[0];
+                    specular[1] = object->sphere.specular_color[1];
+                    specular[2] = object->sphere.specular_color[2];
+                }else if (object->kind == 0){
+                    N[0] = object->plane.normal[0];
+                    N[1] = object->plane.normal[1];
+                    N[2] = object->plane.normal[2];
+                    diffuse[0] = object->plane.difuse_color[0];
+                    diffuse[1] = object->plane.difuse_color[1];
+                    diffuse[2] = object->plane.difuse_color[2];
+                    specular[0] = object->plane.specular_color[0];
+                    specular[1] = object->plane.specular_color[1];
+                    specular[2] = object->plane.specular_color[2];
                 }else{
                     fprintf(stderr, "Type of object does not exist");
                 }
