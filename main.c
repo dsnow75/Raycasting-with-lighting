@@ -19,13 +19,13 @@ typedef struct {
   union {
     struct {
       double normal[3];
-      double difuse_color;
-      double specular_color;      
+      double difuse_color[3];
+      double specular_color[3];      
     } plane;
     struct {
       double radius;
-      double difuse_color;
-      double specular_color;
+      double difuse_color[3];
+      double specular_color[3];
     } sphere;
     struct {
       double height;
@@ -36,6 +36,7 @@ typedef struct {
         double radial1;
         double radial0;
         double angular0;
+        double direction[3];
     } light;
   };
 } Object;
@@ -289,11 +290,16 @@ void read_scene(char* filename) {
               double value = next_number(json);
                if(objects[i]->kind == 1){
                   objects[i]->sphere.radius = value;
+              }else{
+                   fprintf(stderr, "Radius should only to attached to a sphere.");
               }
               //Checks for position,color, and normal fields
             } else if ((strcmp(key, "color") == 0) ||
                        (strcmp(key, "position") == 0) ||
-                       (strcmp(key, "normal") == 0)) {
+                       (strcmp(key, "normal") == 0)
+                       (strcmp(key, "diffuse_color") == 0)
+                       (strcmp(key, "specular_color") == 0)
+                       (strcmp(key, "direction") == 0)) {
               double* value = next_vector(json);
               
               //sets position and color for sphere
@@ -307,6 +313,14 @@ void read_scene(char* filename) {
                       objects[i]->color[0] = value[0];
                       objects[i]->color[1] = value[1];
                       objects[i]->color[2] = value[2];
+                  }else if(strcmp(key, "diffuse_color") == 0){
+                      objects[i]->sphere.difuse_color[0] = value[0];
+                      objects[i]->sphere.difuse_color[1] = value[1];
+                      objects[i]->sphere.difuse_color[2] = value[2];
+                  }else if(strcmp(key, "specular_color") == 0){
+                      objects[i]->sphere.specular_color[0] = value[0];
+                      objects[i]->sphere.specular_color[1] = value[1];
+                      objects[i]->sphere.specular_color[2] = value[2];
                   }else{
                       fprintf(stderr, "Non-valid field entered for a sphere");
                       exit(1);
@@ -325,12 +339,52 @@ void read_scene(char* filename) {
                       objects[i]->plane.normal[0] = value[0];
                       objects[i]->plane.normal[1] = value[1];
                       objects[i]->plane.normal[2] = value[2];
+                  }else if(strcmp(key, "diffuse_color") == 0){
+                      objects[i]->plane.difuse_color[0] = value[0];
+                      objects[i]->plane.difuse_color[1] = value[1];
+                      objects[i]->plane.difuse_color[2] = value[2];
+                  }else if(strcmp(key, "specular_color") == 0){
+                      objects[i]->plane.specular_color[0] = value[0];
+                      objects[i]->plane.specular_color[1] = value[1];
+                      objects[i]->plane.specular_color[2] = value[2];
+                  }else{
+                      fprintf(stderr, "Non-valid field entered for a plane");
+                      exit(1);
+                 }
+              }else if(objects[i]->kind == 2){
+                  if(strcmp(key, "position") == 0){
+                      objects[i]->center[0] = value[0];
+                      objects[i]->center[1] = value[1];
+                      objects[i]->center[2] = value[2];
+                  }else if(strcmp(key, "color") == 0){
+                      objects[i]->color[0] = value[0];
+                      objects[i]->color[1] = value[1];
+                      objects[i]->color[2] = value[2];
+                  }else if(strcmp(key,"direction") == 0) {
+                      objects[i]->light.direction[0] = value[0];
+                      objects[i]->light.direction[1] = value[1];
+                      objects[i]->light.direction[2] = value[2];
                   }else{
                       fprintf(stderr, "Non-valid field entered for a plane");
                       exit(1);
                  }
               }
 
+            } else if ((strcmp(key, "radial-a2") == 0) ||
+                       (strcmp(key, "radial-a1") == 0)
+                       (strcmp(key, "radial-a0") == 0)
+                       (strcmp(key, "angular-a0") == 0)) {
+                  if(objects[i] == 2){
+                      if(strcmp(key, "radial-a2") == 0){
+                          objects[i]->light.radial2 = value;
+                      }else if (strcmp(key, "radial-a1") == 0){
+                          objects[i]->light.radial1 = value;
+                      }else if (strcmp(key, "radial-a0") == 0){
+                          objects[i]->light.radial0 = value;
+                      }else if (strcmp(key, "angular-a0") == 0){
+                          objects[i]->light.angular0 = value;
+                      }
+                  }     
             } else {
               fprintf(stderr, "Error: Unknown property, \"%s\", on line %d.\n",
                       key, line);
@@ -468,6 +522,9 @@ int main(int argc, char** argv) {
                 double N[3];
                 double diffuse[3];
                 double specular[3];
+                double fang = 0;
+                double frad = 1;
+                double R;
                 if (object->kind == 1){
                     N[0] = Ron[0] - object->center[0];
                     N[1] = Ron[1] - object->center[1];
