@@ -364,7 +364,7 @@ void read_scene(char* filename) {
                       lights[j]->color[2] = value[2];
                   }else if(strcmp(key,"direction") == 0) {
                       lights[j]->light.direction[0] = value[0];
-                      lights[j]->light.direction[1] = -value[1];
+                      lights[j]->light.direction[1] = value[1];
                       lights[j]->light.direction[2] = value[2];
                   }else{
                       fprintf(stderr, "Non-valid field entered for a plane");
@@ -505,7 +505,6 @@ int main(int argc, char** argv) {
             color[0] = 0;
             color[1] = 0;
             color[2] = 0;
-            double* light_position = malloc(sizeof(double)*3);
             double object_position[3];
             double Pixel_position[3];
             double N[3];
