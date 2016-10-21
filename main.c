@@ -11,7 +11,7 @@
 #include <string.h>
 #include <ctype.h>
 
-//Structs
+//Structures
 typedef struct {
   int kind; // 0 = cylinder, 1 = sphere
   double color[3];
@@ -56,7 +56,7 @@ typedef struct{
     Object** lights;
     #define MAXCOLOR 255 
     void set_camera(FILE* json);
-    
+    Object camera;
     //sqr function
 static inline double sqr(double v) {
   return v*v;
@@ -220,6 +220,7 @@ void read_scene(char* filename) {
 
   // Find the objects
   int i = 0;
+  int j = 0;
   while (1) {
     c = fgetc(json);
     if (c == ']') {
@@ -260,7 +261,7 @@ void read_scene(char* filename) {
           
       }else if(strcmp(value, "light") == 0){
   
-          lights[i]->kind = 2;
+          lights[j]->kind = 2;
           
       } else {
 	fprintf(stderr, "Error: Unknown type, \"%s\", on line number %d.\n", value, line);
@@ -352,19 +353,19 @@ void read_scene(char* filename) {
                       fprintf(stderr, "Non-valid field entered for a plane");
                       exit(1);
                  }
-              }else if(objects[i]->kind == 2){
+              }else if(lights[j]->kind == 2){
                   if(strcmp(key, "position") == 0){
-                      objects[i]->center[0] = value[0];
-                      objects[i]->center[1] = value[1];
-                      objects[i]->center[2] = value[2];
+                      lights[j]->center[0] = value[0];
+                      lights[j]->center[1] = value[1];
+                      lights[j]->center[2] = value[2];
                   }else if(strcmp(key, "color") == 0){
-                      objects[i]->color[0] = value[0];
-                      objects[i]->color[1] = value[1];
-                      objects[i]->color[2] = value[2];
+                      lights[j]->color[0] = value[0];
+                      lights[j]->color[1] = value[1];
+                      lights[j]->color[2] = value[2];
                   }else if(strcmp(key,"direction") == 0) {
-                      objects[i]->light.direction[0] = value[0];
-                      objects[i]->light.direction[1] = value[1];
-                      objects[i]->light.direction[2] = value[2];
+                      lights[j]->light.direction[0] = value[0];
+                      lights[j]->light.direction[1] = -value[1];
+                      lights[j]->light.direction[2] = value[2];
                   }else{
                       fprintf(stderr, "Non-valid field entered for a plane");
                       exit(1);
@@ -377,17 +378,17 @@ void read_scene(char* filename) {
                        (strcmp(key, "angular-a0") == 0) ||
                        (strcmp(key, "theta") == 0)) {
                 double value = next_number(json);
-                  if(objects[i]->kind == 2){
+                  if(lights[j]->kind == 2){
                       if(strcmp(key, "radial-a2") == 0){
-                          objects[i]->light.radial2 = value;
+                          lights[j]->light.radial2 = value;
                       }else if (strcmp(key, "radial-a1") == 0){
-                          objects[i]->light.radial1 = value;
+                          lights[j]->light.radial1 = value;
                       }else if (strcmp(key, "radial-a0") == 0){
-                          objects[i]->light.radial0 = value;
+                          lights[j]->light.radial0 = value;
                       }else if (strcmp(key, "angular-a0") == 0){
-                          objects[i]->light.angular0 = value;
+                          lights[j]->light.angular0 = value;
                       }else if(strcmp(key,"theta") == 0) {
-                          objects[i]->light.theta = value;
+                          lights[j]->light.theta = value;
                       }
                   }     
             } else {
@@ -402,6 +403,7 @@ void read_scene(char* filename) {
           }
         }
       i++;
+      j++;
       }
       
       skip_ws(json);
@@ -411,6 +413,7 @@ void read_scene(char* filename) {
 	skip_ws(json);
       } else if (c == ']') {
           objects[i] = NULL;
+          lights[i] = NULL;
 	fclose(json);
 	return;
       } else {
@@ -434,6 +437,7 @@ double static clamp(double s){
 
 int main(int argc, char** argv) {
     objects = malloc(sizeof(Object*)*129);
+    lights = malloc(sizeof(Object*)*129);
     int index = 0;
     FILE* outputfile;
     //checks for number of arguments
@@ -444,8 +448,9 @@ int main(int argc, char** argv) {
     read_scene(argv[3]);
     Object* object;
   
-  double cx = 0;
-  double cy = 0;
+  double cx = camera.center[0];
+  double cy = camera.center[1];
+  double cz = camera.center[2];
 //grabs height and width of pixel
   int M = atoi(argv[2]);
   int N = atoi(argv[1]);
@@ -454,26 +459,26 @@ int main(int argc, char** argv) {
       exit(1);
   }
   image = malloc(sizeof(Pixel)*M*N);
-  double pixheight = h / M;
-  double pixwidth = w / N;
+  double pixheight = camera.camera.height / M;
+  double pixwidth = camera.camera.width / N;
   
   //Set the objects into the proper place and set the image pixels
   for (int y = 0; y < M; y += 1) {
       for (int x = 0; x < N; x += 1) {
-        double Ro[3] = {0, 0, 0};
+        double Ro[3] = {cx, cy, cz};
         // Rd = normalize(P - Ro)
         double Rd[3] = {
-          cx - (w/2) + pixwidth * (x + 0.5),
-          cy - (h/2) + pixheight * (y + 0.5),
+          cx - (camera.camera.width/2) + pixwidth * (x + 0.5),
+          cy - (camera.camera.height/2) + pixheight * (y + 0.5),
           1
         };
-        double t = 0;
+
         normalize(Rd);
         double best_t = INFINITY;
+        Object* object2;
         for (int i=0; objects[i] != 0; i += 1) {
-          
-          switch(objects[i]->kind) {
-
+            double t = 0;
+            switch(objects[i]->kind) {
               case 0:
                   t = plane_intersection(Ro, Rd,objects[i]->center, objects[i]->plane.normal);
                   break;
@@ -489,61 +494,92 @@ int main(int argc, char** argv) {
           
           if (t > 0 && t < best_t){
               best_t = t;
+              object2 = object;
               object = malloc(sizeof(Object));
               memcpy(object, objects[i], sizeof(Object));
           } 
-          
         }
-       
             //set the color for the pixel
         if (best_t > 0 && best_t != INFINITY) {
-            double* color = malloc(sizeof(double)*3);
+            double color[3];
             color[0] = 0;
             color[1] = 0;
             color[2] = 0;
             double* light_position = malloc(sizeof(double)*3);
-            Object* closest_shadow_object = malloc(sizeof(Object));
-            double Ron[3] = {0,0,0};
-            double Rdn[3] = {0,0,0};
+            double object_position[3];
+            double Pixel_position[3];
+            double N[3];
+            Pixel_position[0] = Rd[0] * best_t + Ro[0];
+            object_position[0] = camera.center[0] - Pixel_position[0];
+            Pixel_position[1] = Rd[1] * best_t + Ro[1];
+            object_position[1] = camera.center[1] - Pixel_position[1];
+            Pixel_position[2] = Rd[2] * best_t + Ro[2];
+            object_position[2] = camera.center[2] - Pixel_position[2];
+            normalize(object_position);
+            if (object->kind == 1){
+                N[0] = Pixel_position[0] - object2->center[0];
+                N[1] = Pixel_position[1] - object2->center[1];
+                N[2] = Pixel_position[2] - object2->center[2];
+            }else if (object->kind == 2){
+                N[0] = object2->plane.normal[0];
+                N[1] = object2->plane.normal[1];
+                N[2] = object2->plane.normal[2];
+            }
+            normalize(N);
             for(int j = 0; lights[j] != NULL; j += 1){
-                Ron[0] = best_t * Rd[0] + Ro[0];
-                Ron[1] = best_t * Rd[1] + Ro[1];
-                Ron[2] = best_t * Rd[2] + Ro[2];
-                light_position = lights[j]->center;
-                Rdn[0] = light_position[0] - Ron[0];
-                Rdn[1] = light_position[1] - Ron[1];
-                Rdn[2] = light_position[2] - Ron[2];
-                double distance_to_light = Rdn - Ron;
-                closest_shadow_object = object;
-                double dl = sqrt(sqr(Ron[0] - lights[j]->center[0]) + sqr(Ron[1] - lights[j]->center[1]) + sqr(Ron[2] - lights[j]->center[2]));
+                double light_object[3];
+                double object_light[3];
+                object_light[0] = lights[j]->center[0] - Pixel_position[0];
+                object_light[1] = lights[j]->center[1] - Pixel_position[1];
+                object_light[2] = lights[j]->center[2] - Pixel_position[2];
+                light_object[0] = Rd[0] * best_t + Ro[0];
+                light_object[1] = Rd[1] * best_t + Ro[1];
+                light_object[2] = Rd[2] * best_t + Ro[2];
+                normalize(light_object);
+                normalize(object_light);
+                double shadow = 0;
+                double dl = sqrt(sqr(Pixel_position[0] - lights[j]->center[0])
+                + sqr(Pixel_position[1] - lights[j]->center[1]) 
+                + sqr(Pixel_position[2] - lights[j]->center[2]));
+                Object* current_object;
                 for(int k = 0; objects[k] != NULL; k += 1){
-                    if(objects[k] == object){
+                    current_object = objects[k];
+                    if(current_object == object2){
                         continue;
                     }
+                    double new_t = 0;
                     switch(objects[k]->kind) {
                         case 0:
-                            t = plane_intersection(Ron, Rdn,objects[k]->center, objects[k]->plane.normal);
+                            new_t = plane_intersection(Pixel_position, object_light,
+                                    objects[k]->center, objects[k]->plane.normal);
                             break;
 
                         case 1:
-                            t = sphere_intersection(Ron, Rdn,objects[k]->center, objects[k]->sphere.radius);
+                            new_t = sphere_intersection(Pixel_position, object_light,
+                                    objects[k]->center, objects[k]->sphere.radius);
                             break;
                         default:
                       // Horrible error
                             exit(1);
                     }
-                    if(best_t > distance_to_light){
-                        continue;
+                    if(new_t > 0 && new_t <= dl){
+                        shadow = 1;
+                        break;
                     }
                 }
-                if (closest_shadow_object == NULL){
-                    double N[3];
+                if (shadow == 0){
                     double diffuse[3];
                     double fang;
                     double specular[3];
                     double frad =(1/(lights[j]->light.radial2*sqr(dl) + lights[j]->light.radial1*dl + lights[j]->light.radial0*dl));
                     double R[3];
-                    double alpha = Ron[0] * lights[j]->center[0] + Ron[1] * lights[j]->center[1] + Ron[2] * lights[j]->center[2];
+                    double L[3];
+                    L[0] = lights[j]->light.direction[0];
+                    L[1] = lights[j]->light.direction[1];
+                    L[2] = lights[j]->light.direction[2];
+                    double alpha = L[0] * lights[j]->center[0] 
+                    + L[1] * lights[j]->center[1] 
+                    + L[2] * lights[j]->center[2];
                     if (lights[j]->light.theta == 0){
                         fang = 1;
                     }else if (cos(lights[j]->light.theta) > cos(alpha)){
@@ -551,53 +587,50 @@ int main(int argc, char** argv) {
                     }else{
                         fang = pow(cos(alpha),20);
                     }
-
                     if (object->kind == 1){
-                        N[0] = Rdn[0] - object->center[0];
-                        N[1] = Rdn[1] - object->center[1];
-                        N[2] = Rdn[2] - object->center[2];
-                        diffuse[0] = object->sphere.difuse_color[0];
-                        diffuse[1] = object->sphere.difuse_color[1];
-                        diffuse[2] = object->sphere.difuse_color[2];
-                        specular[0] = object->sphere.specular_color[0];
-                        specular[1] = object->sphere.specular_color[1];
-                        specular[2] = object->sphere.specular_color[2];
+                        diffuse[0] = object2->sphere.difuse_color[0];
+                        diffuse[1] = object2->sphere.difuse_color[1];
+                        diffuse[2] = object2->sphere.difuse_color[2];
+                        specular[0] = object2->sphere.specular_color[0];
+                        specular[1] = object2->sphere.specular_color[1];
+                        specular[2] = object2->sphere.specular_color[2];
                     }else if (object->kind == 0){
-                        N[0] = object->plane.normal[0];
-                        N[1] = object->plane.normal[1];
-                        N[2] = object->plane.normal[2];
-                        diffuse[0] = object->plane.difuse_color[0];
-                        diffuse[1] = object->plane.difuse_color[1];
-                        diffuse[2] = object->plane.difuse_color[2];
-                        specular[0] = object->plane.specular_color[0];
-                        specular[1] = object->plane.specular_color[1];
-                        specular[2] = object->plane.specular_color[2];
+                        diffuse[0] = object2->plane.difuse_color[0];
+                        diffuse[1] = object2->plane.difuse_color[1];
+                        diffuse[2] = object2->plane.difuse_color[2];
+                        specular[0] = object2->plane.specular_color[0];
+                        specular[1] = object2->plane.specular_color[1];
+                        specular[2] = object2->plane.specular_color[2];
                     }else{
                         fprintf(stderr, "Type of object does not exist");
                     }
-                    double L[3];
-                    L[0] = Rdn[0];
-                    L[1] = Rdn[1];
-                    L[2] = Rdn[2];
-                    double V[3];
-                    V[0] = -Rd[0];
-                    V[1] = -Rd[1];
-                    V[2] = -Rd[2];
-                    R[0] = 2 * (N[0] * Rdn[0] + N[1] * Rdn[1] + N[2] * Rdn[2]) * N[0] - Rdn[0];
-                    R[1] = 2 * (N[0] * Rdn[0] + N[1] * Rdn[1] + N[2] * Rdn[2]) * N[1] - Rdn[1];
-                    R[2] = 2 * (N[0] * Rdn[0] + N[1] * Rdn[1] + N[2] * Rdn[2]) * N[2] - Rdn[2];
-                    color[0] = frad*fang*((lights[j]->color[0]*(N[0] * Rdn[0] + N[1] * Rdn[1] + N[2] * Rdn[2])) + (lights[j]->color[0]*(R[0] * V[0] + R[1] * V[1] + V[2] * R[2])));
-                    color[1] = frad*fang*((lights[j]->color[1]*(N[0] * Rdn[0] + N[1] * Rdn[1] + N[2] * Rdn[2])) + (lights[j]->color[1]*(R[0] * V[0] + R[1] * V[1] + V[2] * R[2])));
-                    color[2] = frad*fang*((lights[j]->color[2]*(N[0] * Rdn[0] + N[1] * Rdn[1] + N[2] * Rdn[2])) + (lights[j]->color[2]*(R[0] * V[0] + R[1] * V[1] + V[2] * R[2])));
+                    
+                    R[0] = light_object[0] - 2 * (N[0] * light_object[0] + N[1] * light_object[1] + N[2] * light_object[2]) * N[0];
+                    R[1] = light_object[1] - 2 * (N[0] * light_object[0] + N[1] * light_object[1] + N[2] * light_object[2]) * N[1];
+                    R[2] = light_object[2] - 2 * (N[0] * L[0] + N[1] * L[1] + N[2] * L[2]) * N[2];
+                    normalize(R);
+                    normalize(L);
+                    double difuse = (N[0] * object_light[0] + N[1] * object_light[1] + N[2] * object_light[2]);
+                    double specular2 = (R[0] * object_position[0] + R[1] * object_position[1] + object_position[2] * R[2]);
+                    if(difuse <= 0){
+                        difuse = 0;
+                    }
+                    if (specular2 <= 0 && difuse <= 0){
+                        specular2 = 0;
+                    }
+                    double specular3 = pow(specular2, 20);
+                    color[0] += frad*fang*((lights[j]->color[0]*difuse*diffuse[0]) + (lights[j]->color[0] * specular3 * specular[0]));
+                    color[1] += frad*fang*((lights[j]->color[1]*difuse*diffuse[1]) + (lights[j]->color[1] * specular3 * specular[1]));
+                    color[2] += frad*fang*((lights[j]->color[2]*difuse*diffuse[2]) + (lights[j]->color[2] * specular3 * specular[2]));
                 }
-            }            
-           image[index].r = (unsigned char)(clamp(color[0])*MAXCOLOR);
-           image[index].g = (unsigned char)(clamp(color[1])*MAXCOLOR);
-           image[index].b = (unsigned char)(clamp(color[2])*MAXCOLOR);
+            }
+            image[index].r = (unsigned char)(clamp(color[0])*MAXCOLOR);
+            image[index].g = (unsigned char)(clamp(color[1])*MAXCOLOR);
+            image[index].b = (unsigned char)(clamp(color[2])*MAXCOLOR);
         }else{
-            image[index].r = 0;
-            image[index].g = 0;
-            image[index].b = 0;
+            image[index].r = 255;
+            image[index].g = 255;
+            image[index].b = 255;
         }
         index++;
         }
@@ -616,7 +649,9 @@ int main(int argc, char** argv) {
 void set_camera(FILE* json){
     int c;
     skip_ws(json);
-      
+    camera.center[0] = 0;
+    camera.center[1] = 0;
+    camera.center[2] = 0;
       while (1) {
 	// , }
 	c = next_c(json);
@@ -632,12 +667,12 @@ void set_camera(FILE* json){
 	  skip_ws(json);
 	  expect_c(json, ':');
 	  skip_ws(json);
-          
+          double value = next_number(json);
 	  if (strcmp(key, "width") == 0) {
-	    w = next_number(json);
+              camera.camera.width = value;
             
 	  } else if ((strcmp(key, "height") == 0)) {
-	    h = next_number(json);
+              camera.camera.height = value;
             
 	  } else {
 	    fprintf(stderr, "Error: Unknown property, \"%s\", on line %d.\n",
